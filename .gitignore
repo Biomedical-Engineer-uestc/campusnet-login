@@ -1,0 +1,27 @@
+# 本地账号配置：包含学号，不要提交
+config.ini
+config.local.ini
+
+# 凭据/运行数据
+credential.dat
+*.log
+stop.flag
+watch.lock
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 编辑器/系统
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

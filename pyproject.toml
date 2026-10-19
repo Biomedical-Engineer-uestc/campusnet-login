@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "campusnet-login"
+version = "2.0.0"
+description = "可扩展的校园网自动登录工具：深澜 Srun、锐捷 ePortal、通用网页表单"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "CampusNet contributors" }]
+keywords = ["campus network", "portal login", "srun", "ruijie", "eportal", "校园网"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: MacOS",
+]
+dependencies = [
+  "requests>=2.28",
+  "keyring>=24; sys_platform != 'win32'",
+]
+
+[project.scripts]
+campusnet = "campusnet.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["campusnet*"]
+
+[tool.setuptools]
+include-package-data = true
