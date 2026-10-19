@@ -9,3 +9,7 @@ include *.bat
 include *.vbs
 recursive-include docs *.md
 recursive-include tests *.py
+recursive-include packaging *.ps1
+recursive-include packaging/portable *.bat
+recursive-include packaging/portable *.vbs
+recursive-include packaging/portable *.txt

@@ -52,6 +52,7 @@ class SrunState:
         self.password = "test-pass"
         self.online = False
         self.login_attempts = 0
+        self.status_requests = 0
         self.token = "0123456789abcdef" * 4
 
 
@@ -80,6 +81,7 @@ var CONFIG = {
             self.send_body(html)
             return
         if parsed.path == "/cgi-bin/rad_user_info":
+            self.state.status_requests += 1
             if self.state.online:
                 self.send_jsonp(
                     {

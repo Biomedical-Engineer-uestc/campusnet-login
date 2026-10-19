@@ -56,7 +56,33 @@
 - 802.1X / WPA-Enterprise / PPPoE 等非网页认证方式；
 - 纯 JavaScript 渲染、没有普通 HTML 表单的登录页。
 
+## 不在学校时 / 其它 Wi-Fi
+
+后台守护不会主动扫描或登录其它 Wi-Fi 的酒店/热点门户：
+
+- 如果当前 Wi-Fi 能正常上网，守护只做一次联网检测，判定在线后休眠，
+  **不会访问学校门户**；
+- 如果当前网络需要认证但没有互联网，它会尝试已保存的学校门户；
+  连续失败会从 30 秒逐步退避到最长 10 分钟一次；
+- 如果学校门户被重定向到未确认的域名，它会停止发送认证信息，
+  不会把学校密码交给其它 Wi-Fi 门户；
+- 它不会自动发现并登录酒店、机场等其它门户，需要手动打开浏览器处理。
+
 ## 快速开始
+
+### Windows 免 Python 独立版（推荐给普通用户）
+
+普通用户不需要安装 Python。在仓库的 **Releases** 页面下载
+`CampusNet-2.1.0-win64.zip`，解压到固定目录后双击 `一键联网.bat`。
+
+- 首次运行会自动探测登录页；探测不到时会让你粘贴登录页地址；
+- 输入账号和密码（密码不回显），程序测试登录并用 Windows DPAPI 加密保存；
+- 双击 `安装开机自启.bat` 可添加开机自启；
+- 双击 `卸载开机自启.bat` 可停止守护并移除自启；
+- 独立版是未签名 exe，Windows SmartScreen 可能显示“未知发布者”；
+  Release 页面提供 zip 的 SHA256，可自行校验。
+
+### 从源码运行
 
 依赖：Python 3.9+、`requests`。Linux/macOS 建议安装 `keyring`（本仓库的
 `requirements.txt` 已按平台处理）。
@@ -65,7 +91,7 @@
 python -m pip install -r requirements.txt
 ```
 
-### Windows 便携版
+#### Windows 源码版
 
 1. 双击 `一键联网.bat`。
 2. 首次运行进入设置向导：
@@ -220,8 +246,9 @@ log = true
 python -m unittest discover -s tests -v
 ```
 
-21 个测试覆盖：Srun 协议向量和请求、锐捷登录/加密拒绝、通用表单明文/MD5/验证码/跨域、
-配置迁移、DPAPI、CLI 连接和首次向导。测试全部使用本地模拟门户。
+23 个测试覆盖：Srun 协议向量和请求、锐捷登录/加密拒绝、通用表单明文/MD5/验证码/跨域、
+配置迁移、DPAPI、CLI 连接、首次向导、其它 Wi-Fi 快速状态和跨域重定向拒绝。
+测试全部使用本地模拟门户。
 
 贡献新协议请见 [CONTRIBUTING.md](CONTRIBUTING.md)，支持边界见
 [docs/PORTALS.md](docs/PORTALS.md)。

@@ -155,6 +155,13 @@ def _origin(url: str) -> str:
     return f"{parts.scheme}://{parts.netloc}"
 
 
+def _hostname(url: str) -> str:
+    try:
+        return (urlsplit(url).hostname or "").lower()
+    except Exception:
+        return ""
+
+
 def _make_http(cfg: Config) -> HttpClient:
     return HttpClient(timeout=cfg.timeout, verify_tls=cfg.verify_tls)
 
@@ -204,6 +211,11 @@ def build_runtime(
         target = target or (cfg.hosts[0] if cfg.hosts else "")
         if not target:
             raise ConfigError("尚未配置 Srun 门户地址")
+        allowed_hosts = {
+            _hostname(item)
+            for item in [target, cfg.url, *cfg.hosts]
+            if item
+        }
         context = PortalContext(
             protocol="srun",
             portal_url=target,
@@ -212,13 +224,29 @@ def build_runtime(
             prepared=False,
         )
         context = adapter.prepare(context)
+        if _hostname(context.base) not in allowed_hosts:
+            raise NetworkError(
+                "登录页被重定向到了未确认的域名，已停止发送认证信息。"
+                "如果学校门户地址变更，请重新运行 --setup。"
+            )
         return Runtime(protocol, adapter, context)
 
     if not target:
         raise ConfigError("尚未配置门户地址")
+    target_host = _hostname(target)
     page = http.get_page(target, via="配置")
+    if _hostname(page.final_url or page.url) != target_host:
+        raise NetworkError(
+            "登录页被重定向到了未确认的域名，已停止发送认证信息。"
+            "当前 Wi-Fi 可能不是学校网络；如门户地址变更，请重新运行 --setup。"
+        )
     context = type(adapter).context_from_page(cfg, page)
     context = adapter.prepare(context)
+    if _hostname(context.base) != target_host:
+        raise NetworkError(
+            "登录页被重定向到了未确认的域名，已停止发送认证信息。"
+            "当前 Wi-Fi 可能不是学校网络；如门户地址变更，请重新运行 --setup。"
+        )
     return Runtime(protocol, adapter, context)
 
 
@@ -227,6 +255,7 @@ def check_status(
     http: HttpClient,
     logger: logging.Logger,
     ip_override: Optional[str] = None,
+    quick: bool = False,
 ) -> tuple[Runtime, Status]:
     protocol = cfg.protocol
 
@@ -247,6 +276,15 @@ def check_status(
             referer=target,
             prepared=False,
         )
+        if quick:
+            # 守护/一次性连接先看互联网是否可用。在别的 Wi-Fi 上可上网时
+            # 不访问学校门户，避免每 30 秒对不存在的校园网做超时探测。
+            internet = http.check_internet(cfg.connectivity_urls)
+            if internet is True:
+                return (
+                    Runtime(protocol, adapter, context),
+                    Status(True, {"connectivity_only": True}),
+                )
         return Runtime(protocol, adapter, context), adapter.status(context)
 
     # 锐捷/通用表单：是否在线用联网探测判断，不需要每次拉取门户页。
@@ -288,7 +326,9 @@ def connect_once(
         return 2
 
     try:
-        runtime, status = check_status(cfg, http, logger, ip_override)
+        runtime, status = check_status(
+            cfg, http, logger, ip_override, quick=True
+        )
     except (NetworkError, PortalProtocolError) as exc:
         logger.error("%s。请确认已连接校园网 Wi-Fi 或网线。", exc)
         return 1
@@ -437,6 +477,8 @@ def run_watch(
     last_error_message = ""
     last_error_at = 0.0
     login_error_count = 0
+    failure_backoff = cfg.interval
+    max_backoff = max(600, cfg.interval)
 
     logger.info("守护模式已启动，每 %d 秒检查一次。", cfg.interval)
 
@@ -445,9 +487,17 @@ def run_watch(
             logger.info("收到停止请求，守护进程退出。")
             return 0
 
+        cycle_failed = False
         try:
-            runtime, status = check_status(cfg, http, logger, ip_override)
+            runtime, status = check_status(
+                cfg, http, logger, ip_override, quick=True
+            )
             if status.online is True:
+                if failure_backoff > cfg.interval:
+                    logger.info(
+                        "网络恢复正常，检查间隔恢复为 %d 秒。", cfg.interval
+                    )
+                failure_backoff = cfg.interval
                 if last_online is not True:
                     logger.info("已在线：%s", format_online(status.info))
                 last_online = True
@@ -473,6 +523,11 @@ def run_watch(
                         "登录成功%s",
                         "（当前 IP 已在线）" if result.already_online else "。",
                     )
+                    if failure_backoff > cfg.interval:
+                        logger.info(
+                            "网络恢复正常，检查间隔恢复为 %d 秒。", cfg.interval
+                        )
+                    failure_backoff = cfg.interval
                     login_error_count = 0
                     last_online = True
                 except CredentialError as exc:
@@ -522,6 +577,7 @@ def run_watch(
                             f"连续 3 次被门户拒绝：{exc}",
                         )
                 except (NetworkError, PortalProtocolError) as exc:
+                    cycle_failed = True
                     now = time.time()
                     message = str(exc)
                     if message != last_error_message or now - last_error_at > 300:
@@ -529,6 +585,7 @@ def run_watch(
                         last_error_message = message
                         last_error_at = now
         except (NetworkError, PortalProtocolError) as exc:
+            cycle_failed = True
             now = time.time()
             message = str(exc)
             if message != last_error_message or now - last_error_at > 300:
@@ -545,10 +602,20 @@ def run_watch(
                 "请运行 --setup 重新配置，或提交 issue 获取适配支持。",
             )
         except Exception as exc:
+            cycle_failed = True
             logger.exception("守护循环出现未预期错误：%s", exc)
 
+        if cycle_failed:
+            sleep_seconds = failure_backoff
+            next_backoff = min(max_backoff, max(cfg.interval, failure_backoff * 2))
+            if next_backoff != failure_backoff:
+                logger.info("连续失败，%d 秒后重试。", sleep_seconds)
+            failure_backoff = next_backoff
+        else:
+            sleep_seconds = cfg.interval
+
         try:
-            if sleep_with_stop(cfg.interval):
+            if sleep_with_stop(sleep_seconds):
                 logger.info("收到停止请求，守护进程退出。")
                 return 0
         except KeyboardInterrupt:
