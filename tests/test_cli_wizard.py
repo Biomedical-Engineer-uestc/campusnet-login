@@ -77,6 +77,8 @@ class TestCli(unittest.TestCase):
         code = cli.connect_once(cfg, self.http, self.logger, store)
         self.assertEqual(code, 0)
         self.assertTrue(self.state.online)
+        # 已在线分支必须直接返回，不能调用登录或崩溃。
+        self.assertEqual(cli.connect_once(cfg, self.http, self.logger, store), 0)
         self.assertEqual(cli.run_status(cfg, self.http, self.logger), 0)
 
     def test_wrong_password_returns_3_once(self):

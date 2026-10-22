@@ -1,4 +1,4 @@
-﻿CampusNet Login 2.1.0 Windows 免 Python 版
+﻿CampusNet Login 2.1.1 Windows 免 Python 版
 
 1. 解压
    把整个文件夹解压到一个固定位置，不要只复制 CampusNet.exe，

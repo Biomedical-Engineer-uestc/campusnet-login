@@ -337,7 +337,7 @@ def connect_once(
         return 2
 
     if status.online is True:
-        _log_status(logger, status)
+        logger.info("当前已在线：%s", format_online(status.info))
         return 0
     if status.online is None:
         logger.info("暂时无法确认在线状态（%s），尝试登录。", status.message)
